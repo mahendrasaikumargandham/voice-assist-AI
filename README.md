@@ -1,2 +1,2 @@
 <h1>Voice Assist in Python</h1>
-<p>This is a Voice Assistant App designined in Python</p>
+Visit <a href="https://github.com/mahendrasaikumargandham/voice-assist-AI/blob/master/Packages/script.sh">script.sh</a> file to install the packages first to run the project.
