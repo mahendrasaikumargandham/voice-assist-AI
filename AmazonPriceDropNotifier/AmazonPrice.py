@@ -72,10 +72,13 @@ class scrap:
         speak("Email Successfully sent")
         print("Email Successfully sent\n")
 
-
+speak("Enter url of amazon website")
 url = input("Enter Url of amazon webpage: ")
+speak("Enter Threshold price")
 price = int(input("Enter Threshold price: "))
+speak("Enter your email address to send an alert")
 email = input("Enter your Email Address to send an alert: ")
+speak("Enter time gap to check price in hours")
 recurrence = float(input("Enter time gap to check price (in Hrs): "))
 main = scrap(url, price, email)
 while main.run():
