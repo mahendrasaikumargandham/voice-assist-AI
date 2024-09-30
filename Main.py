@@ -1,90 +1,193 @@
-import CPU.CPU                                                                           # importing cpu() function from CPU.py
-import DateTime.DateTime                                                                  
-import Jokes.Jokes                                                                         # importing jokes() from Jokes.py
-import ScreenShots.ScreenShot                                                                      # importing screenshot() from Screenshot.py
-import MailSender.SendMail                                                                       # importing sendMail() from SendMail.py
-from TakeCommand import *                                                                     # importing takeCommand() from TakeCommand.py
+import CPU.CPU
+import DateTime.DateTime
+import Jokes.Jokes
+import ScreenShots.ScreenShot
+import MailSender.SendMail
+from TakeCommand import takeCommand
 import pyttsx3
 import webbrowser as wb
 import wikipedia
 import os
+import requests
+import json
+import wolframalpha
+import speech_recognition as sr
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import logging
+import asyncio
+import aiohttp
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Setup logging
+logging.basicConfig(filename='assistant.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 engine = pyttsx3.init()
-def speak(audio):
-  engine.say(audio)
-  engine.runAndWait()
-  
 
-if __name__ == "__main__":                                                                    # main function of the project.                                               
+def speak(audio):
+    engine.say(audio)
+    engine.runAndWait()
+
+# Initialize TF-IDF vectorizer
+vectorizer = TfidfVectorizer()
+stop_words = set(stopwords.words('english'))
+
+# Load intent data
+with open('intents.json', 'r') as f:
+    intents = json.load(f)
+
+# Prepare intent data for TF-IDF
+intent_texts = [' '.join(intent['patterns']) for intent in intents['intents']]
+tfidf_matrix = vectorizer.fit_transform(intent_texts)
+
+def get_intent(query):
+    query_vector = vectorizer.transform([query])
+    similarities = cosine_similarity(query_vector, tfidf_matrix)
+    intent_index = np.argmax(similarities)
+    return intents['intents'][intent_index]
+
+async def fetch_weather(city):
+    api_key = os.getenv('WEATHER_API_KEY')
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            data = await response.json()
+            if data["cod"] != "404":
+                main = data["main"]
+                temperature = main["temp"]
+                humidity = main["humidity"]
+                description = data["weather"][0]["description"]
+                return f"The temperature in {city} is {temperature}°C with {humidity}% humidity. The weather is {description}."
+            else:
+                return "City not found."
+
+async def get_news():
+    api_key = os.getenv('NEWS_API_KEY')
+    url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={api_key}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            data = await response.json()
+            articles = data['articles'][:5]
+            news_headlines = [article['title'] for article in articles]
+            return "Here are the top 5 news headlines:\n" + "\n".join(news_headlines)
+
+def wolframalpha_query(query):
+    app_id = os.getenv('WOLFRAMALPHA_APP_ID')
+    client = wolframalpha.Client(app_id)
+    try:
+        res = client.query(query)
+        answer = next(res.results).text
+        return answer
+    except:
+        return "I couldn't find an answer to that question."
+
+async def main():
+    speak("Hello! I'm your advanced virtual assistant. How can I help you today?")
+    
     while True:
         query = takeCommand().lower()
+        logging.info(f"User query: {query}")
 
-        if 'time' in query:                                                                   # if there is a word 'time' in the query, then it will call the time().
+        intent = get_intent(query)
+        response = np.random.choice(intent['responses'])
+        speak(response)
+
+        if 'time' in query:
             DateTime.DateTime.time()
-
-        elif 'date' in query:                                                                 # It will call date() when there is a word 'date' in your query.
+        
+        elif 'date' in query:
             DateTime.DateTime.date()
-
-        elif 'wikipedia' in query:                                                            # it will search on wikipedia without any opening of browser.
-            speak("Searching..")
+        
+        elif 'wikipedia' in query:
+            speak("Searching Wikipedia...")
             query = query.replace("wikipedia", "")
-            result = wikipedia.summary(query, sentences=2)
-            print(result)
-            query(result)
-
-        elif 'send mail' in query:                                                            # sendMail() excutes from the SendMail.py file
             try:
-                speak("What should I send? ")
+                result = wikipedia.summary(query, sentences=2)
+                speak("According to Wikipedia")
+                print(result)
+                speak(result)
+            except wikipedia.exceptions.DisambiguationError as e:
+                speak("There are multiple results. Can you be more specific?")
+            except wikipedia.exceptions.PageError:
+                speak("Sorry, I couldn't find any information on that topic.")
+        
+        elif 'send mail' in query:
+            try:
+                speak("What should I send?")
                 content = takeCommand()
                 to = 'Client_mail_address@domain.com'
                 MailSender.SendMail.sendMail(to, content)
-                speak(content)
-                speak("E mail has been sent!")
+                speak("Email has been sent!")
             except Exception as e:
-                print(e)
-                speak("Unable to send Email, Please Check your internet connection")
-
-        elif 'search in chrome' in query:                                                      # It will opens the chrome and search for the results.
+                logging.error(f"Error sending email: {str(e)}")
+                speak("Unable to send Email. Please check your internet connection.")
+        
+        elif 'search in chrome' in query:
             speak("What should I search?")
-            chromepath = 'your chrome application path' 
+            chromepath = 'your chrome application path'
             search = takeCommand().lower()
-            wb.get(chromepath).open_new_tab(search)
-
-        elif 'logout' in query:                                                                # It will logout if you give logout as a word input
-            os.system("Shutdown -l")
-
-        elif 'shutdown' in query:                                                              # It will shutdown the system. Make sure that all the data is saved in your computer if you want to shutdown the computer.
-            os.system("Shutdown /s /t 1")                                                      # try at your own risk, because some data may not come back after the shutdown process.
-
-        elif 'restart' in query:                                                           # It will restart the computer if you give restart as the command.
-            os.system("Shutdown /r /t 1")
-
+            wb.get(chromepath).open_new_tab(search + '.com')
+        
+        elif 'logout' in query:
+            os.system("shutdown -l")
+        
+        elif 'shutdown' in query:
+            os.system("shutdown /s /t 1")
+        
+        elif 'restart' in query:
+            os.system("shutdown /r /t 1")
+        
         elif 'play songs' in query:
-            songs_dir = 'D:\\Music'                                                            # in songs_dir variable you can add your own path of music.
+            songs_dir = 'D:\\Music'
             songs = os.listdir(songs_dir)
             os.startfile(os.path.join(songs_dir, songs[0]))
-            
+        
         elif 'remember' in query:
-            speak("What should I remember? ")
+            speak("What should I remember?")
             data = takeCommand()
-            speak("you said me to remember "+data)
-            remember = open('Data/data.txt', 'w')
-            remember.write(data)
-            remember.close()                                                                    
-
-        elif 'do you know' in query:                                                           # If there is a command 'do you know', then it will check if there is anything saved in the data.txt file
-            remember = open('Data/data.txt', 'r')                                                   # If there is anything in the file, then it will speak out the saved ones.
-            speak("You said me to remember that"+remember.read())                                   
-
-        elif 'screenshot' in query:                                                             # It will take the screenshot and saves the screenshot in the same directory.
+            speak("You said me to remember " + data)
+            remember = open('Data/data.txt', 'a')
+            remember.write(data + '\n')
+            remember.close()
+        
+        elif 'do you know anything' in query:
+            remember = open('Data/data.txt', 'r')
+            speak("You said me to remember that " + remember.read())
+        
+        elif 'screenshot' in query:
             ScreenShots.ScreenShot.screenshot()
-            speak("Screenhot taken")
-
-        elif 'cpu' in query:                                                                    # speaks the state of CPU in your computer.
+            speak("Screenshot taken")
+        
+        elif 'cpu' in query:
             CPU.CPU.cpu()
-
-        elif 'joke' in query:                                                                   # speaks a random joke from pyjokes package in Package.py file
+        
+        elif 'joke' in query:
             Jokes.Jokes.jokes()
+        
+        elif 'weather' in query:
+            speak("Which city's weather would you like to know?")
+            city = takeCommand()
+            weather_info = await fetch_weather(city)
+            speak(weather_info)
+        
+        elif 'news' in query:
+            news = await get_news()
+            speak(news)
+        
+        elif 'calculate' in query:
+            question = query.replace('calculate', '')
+            answer = wolframalpha_query(question)
+            speak(answer)
+        
+        elif 'offline' in query:
+            speak("Goodbye! Have a great day!")
+            break
 
-        elif 'offline' in query:                                                                # quits the program when there is a word 'offline' in your query.
-            quit()
+if __name__ == "__main__":
+    asyncio.run(main())
