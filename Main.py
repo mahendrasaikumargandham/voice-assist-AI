@@ -21,6 +21,11 @@ import logging
 import asyncio
 import aiohttp
 from dotenv import load_dotenv
+import random
+import calendar
+import pytz
+from datetime import datetime
+import geocoder
 
 # Load environment variables
 load_dotenv()
@@ -86,6 +91,33 @@ def wolframalpha_query(query):
         return answer
     except:
         return "I couldn't find an answer to that question."
+
+# New function to get a random quote
+def get_random_quote():
+    quotes = [
+        "The only way to do great work is to love what you do. - Steve Jobs",
+        "Innovation distinguishes between a leader and a follower. - Steve Jobs",
+        "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
+        "Success is not final, failure is not fatal: it is the courage to continue that counts. - Winston Churchill",
+        "The only limit to our realization of tomorrow will be our doubts of today. - Franklin D. Roosevelt"
+    ]
+    return random.choice(quotes)
+
+# New function to get current location
+def get_current_location():
+    g = geocoder.ip('me')
+    return g.city
+
+# New function to get time in different time zones
+def get_time_in_timezone(timezone):
+    tz = pytz.timezone(timezone)
+    current_time = datetime.now(tz)
+    return current_time.strftime("%I:%M %p")
+
+# New function to get calendar for a specific month and year
+def get_calendar(year, month):
+    cal = calendar.month(year, month)
+    return cal
 
 async def main():
     speak("Hello! I'm your advanced virtual assistant. How can I help you today?")
@@ -184,6 +216,37 @@ async def main():
             question = query.replace('calculate', '')
             answer = wolframalpha_query(question)
             speak(answer)
+        
+        # New feature: Get a random quote
+        elif 'quote' in query:
+            quote = get_random_quote()
+            speak(quote)
+        
+        # New feature: Get current location
+        elif 'where am i' in query:
+            location = get_current_location()
+            speak(f"Based on your IP address, you are currently in {location}")
+        
+        # New feature: Get time in different time zones
+        elif 'time in' in query:
+            city = query.split('time in', 1)[1].strip()
+            try:
+                time = get_time_in_timezone(city)
+                speak(f"The current time in {city} is {time}")
+            except:
+                speak(f"Sorry, I couldn't find the time zone for {city}")
+        
+        # New feature: Get calendar
+        elif 'calendar' in query:
+            speak("For which year and month do you want the calendar?")
+            year_month = takeCommand()
+            try:
+                year, month = map(int, year_month.split())
+                cal = get_calendar(year, month)
+                print(cal)
+                speak(f"I've displayed the calendar for {calendar.month_name[month]} {year}")
+            except:
+                speak("Sorry, I couldn't understand the year and month. Please try again.")
         
         elif 'offline' in query:
             speak("Goodbye! Have a great day!")
